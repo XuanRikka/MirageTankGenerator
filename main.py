@@ -13,14 +13,14 @@ alc = Alconna(
     "MirageTankGenerator",
     Args["inner_path", str],
     Args["outer_path", str],
-    Option("--inner-light", Args["inner_light", float], default=1.0, help_text="表图亮度调节系数，必须在0-1之间，默认为1.0"),
-    Option("--outer-light", Args["outer_light", float], default=0.3, help_text="里图亮度调节系数，必须在0-1之间，默认为0.3"),
-    Option("--output|-o", Args["output_path", str], default="./output.png",
+    Option("--inner-light", Args["inner_light", float, 1.0], default=1.0, help_text="表图亮度调节系数，必须在0-1之间，默认为1.0"),
+    Option("--outer-light", Args["outer_light", float, 0.3], default=0.3, help_text="里图亮度调节系数，必须在0-1之间，默认为0.3"),
+    Option("--output|-o", Args["output_path", str, "./output.png"], default="./output.png",
            help_text="输出文件路径，只能为webp/png/bmp"),
-    Option("--cpu-num|-c", Args["cpu_num", str], default=os.cpu_count(),
+    Option("--cpu-num|-c", Args["cpu_num", int, os.cpu_count()], default=os.cpu_count(),
            help_text="OpenCV使用CPU多线程的核心数，设置为0则禁用多线程"),
     Option("--disable-opencl|-d-ocl", default=False, action=store_true, help_text="是否禁用OpenCV使用OpenCL"),
-    Option("--interp", Args["interp", ["lanczos4", "cubic", "linear", "nearest"]], default="cubic",
+    Option("--interp|-i", Args["interp_str", ["lanczos4", "cubic", "linear", "nearest"], "cubic"], default="cubic",
            help_text="放大时使用的算法，缩小时无效，默认为cubic"),
     Option("--use-outer", default=False, action=store_true, help_text="输出的图片使用表图的分辨率，默认使用里图的分辨率"),
     CommandMeta(
@@ -41,26 +41,37 @@ if __name__ == "__main__":
         cv2.ocl.setUseOpenCL(True)
     cv2.setNumThreads(parse.query("cpu-num").args["cpu_num"])
 
+    if cv2.ocl.haveOpenCL():
+        print("已启用OpenCL")
+        device = cv2.ocl.Device_getDefault()
+        global_mem_mb = device.globalMemSize() // (1024 ** 2)  # 字节转MB
+        compute_units = device.maxComputeUnits()
+        print(f" - 设备名称: {device.name()}")
+        print(" - OpenCL版本:", device.OpenCLVersion())
+        print(f" - 全局内存: {global_mem_mb} MB")
+        print(f" - 计算单元: {compute_units}")
+
     inner_path = Path(parse.query("inner_path"))
     outer_path = Path(parse.query("outer_path"))
 
-    inner_light = parse.query("inner_light")
-    outer_light = parse.query("outer_light")
+    inner_light = parse.query("inner-light").args["inner_light"]
+    outer_light = parse.query("outer-light").args["outer_light"]
     if (0 > inner_light > 1) or (0 > outer_light > 1):
         print("inner-light/outer-light的数值必须是在0-1之间的浮点数")
 
-    if not inner_path.is_file():
-        print("表图文件不存在或者路径不是一个文件")
-    elif not outer_path.is_file():
-        print("里图文件不存在或者路径不是一个文件")
-
-    alpha = parse.query("alpha")
-    output_path = Path(parse.query("output_path"))
+    output_path = Path(parse.query("output").args["output_path"])
     if output_path.suffix not in {".webp", ".bmp", ".png"}:
         print("输出文件格式不支持")
         exit(0)
 
-    interp = parse.query("interp")
+    if not inner_path.is_file():
+        print("表图文件不存在或者路径不是一个文件")
+        exit()
+    elif not outer_path.is_file():
+        print("里图文件不存在或者路径不是一个文件")
+        exit()
+
+    interp = parse.query("interp").args["interp_str"]
     inner_img = read_img(inner_path)
     outer_img = read_img(outer_path)
     use_outer = parse.query("use-outer").value
